@@ -40,6 +40,7 @@ available at the command line:
 
 * [CMake](https://cmake.org/)
 * [Node.js](https://nodejs.org/en)
+* [pnpm](https://pnpm.io/) via Corepack
 * Bash: the build steps below expect to run scripts in a Bash environment. For Windows machines, consider running the following steps in a Git Bash environment, or with WSL.
 
 Next, we fetch the SRVB project and its dependencies,
@@ -49,13 +50,14 @@ Next, we fetch the SRVB project and its dependencies,
 git clone --recurse-submodules https://github.com/elemaudio/srvb.git
 cd srvb
 
-# Install npm dependencies
-npm install
+# Install pnpm dependencies
+corepack enable
+pnpm install
 ```
 
 ### Develop
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 In develop mode, the native plugin is compiled to fetch its JavaScript assets from localhost, where subsequently we
@@ -64,7 +66,7 @@ the plugin while it's running inside a host.
 
 ### Release
 ```bash
-npm run build
+pnpm run build
 ```
 
 In release builds, the JavaScript bundles are packaged into the plugin app bundle so that the resulting bundle
@@ -72,7 +74,7 @@ is relocatable, thereby enabling distribution to end users.
 
 ### Troubleshooting
 
-* After a successful build with either `npm run dev` or `npm run build`, you
+* After a successful build with either `pnpm run dev` or `pnpm run build`, you
   should have local plugin binaries built and copied into the correct
   audio plugin directories on your machine. If you don't see them, look in
   `./native/build/scripted/SRVB_artefacts` and copy them manually

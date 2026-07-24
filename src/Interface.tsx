@@ -2,8 +2,7 @@ import type { SVGProps } from 'react';
 import { XCircleIcon, XMarkIcon } from '@heroicons/react/20/solid'
 
 import Knob from './Knob';
-
-import manifest from '../public/manifest.json';
+import {defaultPluginState, parameterDefinitions, type ParamId} from './shared/parameters';
 
 
 // Generated from Lockup.svg using svgr, and then I changed the generated code
@@ -107,7 +106,7 @@ function ErrorAlert({message, reset}: ErrorAlertProps) {
 type InterfaceProps = {
   state: PluginState;
   error: PluginError | null;
-  requestParamValueUpdate: (paramId: string, value: number) => void;
+  requestParamValueUpdate: (paramId: ParamId, value: number) => void;
   resetErrorState: () => void;
 };
 
@@ -118,8 +117,8 @@ export default function Interface(props: InterfaceProps) {
     thumbColor: '#F8FAFC',
   };
 
-  const params = manifest.parameters.map(({paramId, name}) => {
-    const currentValue = props.state[paramId] || 0;
+  const params = parameterDefinitions.map(({paramId, name}) => {
+    const currentValue = props.state[paramId] ?? defaultPluginState[paramId];
 
     return {
       paramId,

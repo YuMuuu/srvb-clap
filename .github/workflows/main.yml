@@ -23,9 +23,13 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: 24.6.0
+
+      - name: Enable Corepack
+        shell: bash
+        run: corepack enable
 
       - name: JUCE Linux Dependencies
         shell: bash
@@ -56,26 +60,24 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          set -x
-          set -e
+          set -ex
 
-          npm ci --ignore-scripts
+          pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Typecheck
         shell: bash
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: Lint
         shell: bash
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Build
         shell: bash
         run: |
-          set -x
-          set -e
+          set -ex
 
-          npm run build
+          pnpm run build
 
       - name: Artifact naming
         shell: bash

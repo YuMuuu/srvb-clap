@@ -1,7 +1,9 @@
 /// <reference types="vite/client" />
 
+import type {PluginState as SharedPluginState} from './shared/parameters';
+
 declare global {
-  type PluginState = Record<string, number>;
+  type PluginState = SharedPluginState;
 
   type PluginError = {
     name?: string;
