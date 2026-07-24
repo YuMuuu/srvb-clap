@@ -14,18 +14,19 @@ await fs.ensureDir(buildDir);
 cd(buildDir);
 
 let buildType = argv.dev ? 'Debug' : 'Release';
+let pluginFormats = process.platform === 'darwin'
+  ? ['CLAP', 'VST3', 'AUV2']
+  : ['CLAP', 'VST3'];
 let cmakeFlags = [
   `-DCMAKE_BUILD_TYPE=${buildType}`,
   '-DCMAKE_INSTALL_PREFIX=./out/',
   '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15',
+  '-DCLAP_WRAPPER_DOWNLOAD_DEPENDENCIES=ON',
+  `-DSRVB_PLUGIN_FORMATS=${pluginFormats.join(';')}`,
 ];
 
 if (argv.dev) {
   cmakeFlags.push('-DELEM_DEV_LOCALHOST=1');
-}
-
-if (process.env.JUCE_WEBVIEW2_PACKAGE_LOCATION) {
-  cmakeFlags.push(`-DJUCE_WEBVIEW2_PACKAGE_LOCATION=${process.env.JUCE_WEBVIEW2_PACKAGE_LOCATION}`);
 }
 
 await $`cmake ${cmakeFlags} ../..`;

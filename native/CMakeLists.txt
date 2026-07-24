@@ -1,90 +1,85 @@
-cmake_minimum_required(VERSION 3.15)
-project(Elem_SRVB VERSION 0.1.0)
+cmake_minimum_required(VERSION 3.21)
+project(Elem_SRVB VERSION 0.1.0 LANGUAGES C CXX)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(APPLE AND (NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 10.15))
+  set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15 CACHE STRING "Minimum macOS version" FORCE)
+endif()
+
+if(APPLE)
+  enable_language(OBJC)
+  enable_language(OBJCXX)
+endif()
 
 set(TARGET_NAME SRVB)
-set(ASSETS_DIR ${CMAKE_SOURCE_DIR}/../dist/)
+set(PRODUCT_NAME "SRVB")
+set(ASSETS_DIR "${CMAKE_SOURCE_DIR}/../dist")
+set(RESOURCE_DIRECTORY "")
+set(SRVB_PLUGIN_FORMATS "CLAP" CACHE STRING "Plugin formats to build with clap-wrapper")
+set(CLAP_SDK_ROOT "${CMAKE_SOURCE_DIR}/../external/clap" CACHE PATH "CLAP SDK root" FORCE)
 
-option(JUCE_ENABLE_MODULE_SOURCE_GROUPS "Enable Module Source Groups" ON)
-option(JUCE_BUILD_EXTRAS "Build JUCE Extras" OFF)
 option(ELEM_DEV_LOCALHOST "Run against localhost for static assets" OFF)
+option(CLAP_WRAPPER_BUILD_TESTS "Build clap-wrapper tests" OFF)
 
-add_subdirectory(juce)
 add_subdirectory(elementary/runtime)
+add_subdirectory(../external/clap-wrapper clap-wrapper)
 
-juce_add_plugin(${TARGET_NAME}
-  BUNDLE_ID "audio.elementary.srvb"
-  COMPANY_NAME "Elementary Audio"
-  COMPANY_WEBSITE "https://www.elementary.audio"
-  COMPANY_EMAIL "nick@elementary.audio"
-  PLUGIN_MANUFACTURER_CODE Elem       # A four-character manufacturer id with at least one upper-case character
-  PLUGIN_CODE Srvb                    # A unique four-character plugin id with at least one upper-case character
-  COPY_PLUGIN_AFTER_BUILD FALSE       # We enable this manually below after adding a copy step
-  APP_SANDBOX_ENABLED TRUE
-  APP_SANDBOX_OPTIONS com.apple.security.network.client com.apple.security.files.user-selected.read-write
-  NEEDS_WEB_BROWSER TRUE
-  NEEDS_WEBVIEW2 TRUE
-  FORMATS AU VST3                     # The formats to build. Other valid formats are: AAX Unity VST AU AUv3
-  PRODUCT_NAME ${TARGET_NAME})        # The name of the final executable, which can differ from the target name
-
-# Copy static assets post build
-if (NOT ELEM_DEV_LOCALHOST)
-  get_target_property(ACTIVE_TARGETS ${TARGET_NAME} JUCE_ACTIVE_PLUGIN_TARGETS)
-  foreach(ACTIVE_TARGET IN LISTS ACTIVE_TARGETS)
-    message(STATUS "Adding resource copy step from ${ASSETS_DIR} for ${ACTIVE_TARGET}")
-
-    get_target_property(ARTIFACT_FILE ${ACTIVE_TARGET} JUCE_PLUGIN_ARTEFACT_FILE)
-    set(RESOURCE_DIR "${ARTIFACT_FILE}/Contents/Resources/")
-
-    add_custom_command(TARGET ${ACTIVE_TARGET} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E rm -rf "${RESOURCE_DIR}/dist"
-      COMMAND ${CMAKE_COMMAND} -E make_directory "${RESOURCE_DIR}/dist"
-      COMMAND ${CMAKE_COMMAND} -E copy_directory "${ASSETS_DIR}" "${RESOURCE_DIR}/dist"
-      COMMAND_EXPAND_LISTS
-      VERBATIM)
-
-    if (APPLE)
-      add_custom_command(TARGET ${ACTIVE_TARGET} POST_BUILD
-        COMMAND codesign --force --sign - --deep "${ARTIFACT_FILE}"
-        VERBATIM)
-    endif()
-  endforeach()
+if(EXISTS "${ASSETS_DIR}")
+  set(RESOURCE_DIRECTORY "${ASSETS_DIR}")
+else()
+  message(WARNING "Asset directory ${ASSETS_DIR} does not exist; CLAP will be built without bundled DSP assets")
 endif()
 
-# Enable copy step
-if (NOT DEFINED ENV{CI})
-  juce_enable_copy_plugin_step(${TARGET_NAME})
-endif()
+add_library(${TARGET_NAME}_impl STATIC
+  elementary_engine.cpp
+  parameters.cpp
+  plugin.cpp)
 
-target_sources(${TARGET_NAME}
-  PRIVATE
-  PluginProcessor.cpp
-  WebViewEditor.cpp)
-
-target_compile_features(${TARGET_NAME}
-  PRIVATE
+target_compile_features(${TARGET_NAME}_impl
+  PUBLIC
   cxx_std_17)
 
-target_compile_definitions(${TARGET_NAME}
+target_include_directories(${TARGET_NAME}_impl
+  PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/choc/containers
+  ${CMAKE_CURRENT_SOURCE_DIR}/choc/javascript
+  ${CMAKE_CURRENT_SOURCE_DIR}/choc/text)
+
+target_compile_definitions(${TARGET_NAME}_impl
   PRIVATE
   ELEM_DEV_LOCALHOST=${ELEM_DEV_LOCALHOST}
-  JUCE_USE_WIN_WEBVIEW2=1
-  JUCE_VST3_CAN_REPLACE_VST2=0
-  JUCE_USE_CURL=0)
+  SRVB_SOURCE_DIR="${CMAKE_SOURCE_DIR}/..")
 
-target_link_libraries(${TARGET_NAME}
-  PRIVATE
-  juce::juce_audio_basics
-  juce::juce_audio_devices
-  juce::juce_audio_plugin_client
-  juce::juce_audio_processors
-  juce::juce_audio_utils
-  juce::juce_core
-  juce::juce_data_structures
-  juce::juce_dsp
-  juce::juce_events
-  juce::juce_graphics
-  juce::juce_gui_basics
-  juce::juce_gui_extra
-  juce::juce_javascript
-  runtime)
+target_link_libraries(${TARGET_NAME}_impl
+  PUBLIC
+  clap
+  clap-wrapper-extensions
+  elem::runtime)
+
+if(UNIX AND NOT APPLE)
+  find_package(Threads REQUIRED)
+  target_link_libraries(${TARGET_NAME}_impl
+    PUBLIC
+    Threads::Threads
+    ${CMAKE_DL_LIBS})
+endif()
+
+make_clapfirst_plugins(
+  TARGET_NAME ${TARGET_NAME}
+  IMPL_TARGET ${TARGET_NAME}_impl
+  OUTPUT_NAME "${PRODUCT_NAME}"
+  ENTRY_SOURCE entry.cpp
+  BUNDLE_IDENTIFIER "audio.elementary.srvb"
+  BUNDLE_VERSION ${PROJECT_VERSION}
+  COPY_AFTER_BUILD FALSE
+  PLUGIN_FORMATS ${SRVB_PLUGIN_FORMATS}
+  ASSET_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${TARGET_NAME}_artefacts/${CMAKE_BUILD_TYPE}"
+  RESOURCE_DIRECTORY "${RESOURCE_DIRECTORY}"
+  AUV2_MANUFACTURER_NAME "Elementary Audio"
+  AUV2_MANUFACTURER_CODE "Elem"
+  AUV2_SUBTYPE_CODE "Srvb"
+  AUV2_INSTRUMENT_TYPE "aufx")

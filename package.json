@@ -22,6 +22,8 @@
     "capture-storybook-screenshots": "node scripts/capture-storybook-screenshots.mjs",
     "format:native": "node scripts/clang-format.mjs",
     "format:native:check": "node scripts/clang-format.mjs --check",
+    "validate:clap": "zx scripts/validate-clap.mjs",
+    "validate:clap:dev": "zx scripts/validate-clap.mjs --dev",
     "lint": "eslint src dsp .storybook scripts/capture-storybook-screenshots.mjs vite.config.ts",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"

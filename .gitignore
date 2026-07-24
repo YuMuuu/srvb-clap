@@ -13,6 +13,7 @@ build
 dist
 *.local
 public/dsp.main.js
+.cache/
 
 # Editor directories and files
 .vscode
