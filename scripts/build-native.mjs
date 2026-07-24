@@ -24,9 +24,5 @@ if (argv.dev) {
   cmakeFlags.push('-DELEM_DEV_LOCALHOST=1');
 }
 
-if (process.env.JUCE_WEBVIEW2_PACKAGE_LOCATION) {
-  cmakeFlags.push(`-DJUCE_WEBVIEW2_PACKAGE_LOCATION=${process.env.JUCE_WEBVIEW2_PACKAGE_LOCATION}`);
-}
-
 await $`cmake ${cmakeFlags} ../..`;
 await $`cmake --build . --config ${buildType} -j 4`;
