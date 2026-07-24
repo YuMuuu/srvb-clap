@@ -39,7 +39,6 @@ struct SrvbPlugin
 {
     clap_plugin_t plugin{};
     const clap_host_t* host = nullptr;
-    const clap_host_log_t* hostLog = nullptr;
     const clap_host_params_t* hostParams = nullptr;
     ParameterSet parameters;
     ElementaryEngine engine;
@@ -47,9 +46,6 @@ struct SrvbPlugin
 
     void requestMainThreadCallback ()
     {
-        if (host == nullptr)
-            return;
-
         if (!callbackRequested.exchange (true, std::memory_order_acq_rel))
             host->request_callback (host);
     }
@@ -218,7 +214,6 @@ const clap_plugin_state_t kState{
 bool pluginInit (const clap_plugin_t* plugin)
 {
     auto& srvb = *fromPlugin (plugin);
-    srvb.hostLog = static_cast<const clap_host_log_t*> (srvb.host->get_extension (srvb.host, CLAP_EXT_LOG));
     srvb.hostParams = static_cast<const clap_host_params_t*> (srvb.host->get_extension (srvb.host, CLAP_EXT_PARAMS));
     return true;
 }

@@ -195,9 +195,6 @@ std::string ElementaryEngine::makeStatePayload (const ParameterSet& parameters) 
 
 void ElementaryEngine::initializeJavaScript (ParameterSet& parameters)
 {
-    if (maxFrames_ == 0)
-        return;
-
     auto nextRuntime = std::make_shared<elem::Runtime<float>> (sampleRate_, maxFrames_);
     std::atomic_store_explicit (&runtime_, nextRuntime, std::memory_order_release);
 
