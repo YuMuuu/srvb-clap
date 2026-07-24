@@ -1,156 +1,138 @@
 #include "PluginProcessor.h"
 #include "WebViewEditor.h"
 
-#include <cstddef>
-#include <cstring>
-#include <unordered_map>
 
-double numberFromVar (const juce::var& v)
-{
-    return static_cast<double> (v);
+// A helper for reading numbers from a choc::Value, which seems to opportunistically parse
+// JSON numbers into ints or 32-bit floats whenever it wants.
+double numberFromChocValue(const choc::value::ValueView& v) {
+    return (
+        v.isFloat32() ? (double) v.getFloat32()
+            : (v.isFloat64() ? v.getFloat64()
+                : (v.isInt32() ? (double) v.getInt32()
+                    : (double) v.getInt64())));
 }
 
-juce::String getMimeType (const juce::String& ext)
-{
-    static const std::unordered_map<juce::String, juce::String> mimeTypes{
-        {".html", "text/html"},        {".js", "application/javascript"}, {".css", "text/css"},
-        {".json", "application/json"}, {".svg", "image/svg+xml"},         {".png", "image/png"},
-        {".jpg", "image/jpeg"},        {".jpeg", "image/jpeg"},           {".woff2", "font/woff2"},
+std::string getMimeType(std::string const& ext) {
+    static std::unordered_map<std::string, std::string> mimeTypes {
+        { ".html",   "text/html" },
+        { ".js",     "application/javascript" },
+        { ".css",    "text/css" },
     };
 
-    if (auto it = mimeTypes.find (ext.toLowerCase ()); it != mimeTypes.end ())
-        return it->second;
+    if (mimeTypes.count(ext) > 0)
+        return mimeTypes.at(ext);
 
     return "application/octet-stream";
 }
 
-std::vector<std::byte> toByteVector (const juce::MemoryBlock& block)
-{
-    std::vector<std::byte> result (block.getSize ());
-    std::memcpy (result.data (), block.getData (), block.getSize ());
-    return result;
-}
-
 //==============================================================================
-WebViewEditor::WebViewEditor (juce::AudioProcessor* proc, juce::File const& assets, int width, int height)
-    : juce::AudioProcessorEditor (proc), assetDirectory (assets)
+WebViewEditor::WebViewEditor(juce::AudioProcessor* proc, juce::File const& assetDirectory, int width, int height)
+    : juce::AudioProcessorEditor(proc)
 {
-    const auto nativeBridgeScript = juce::String (R"script(
-(function() {
-  globalThis.__postNativeMessage__ = function(message, payload) {
-    window.__JUCE__.backend.emitEvent("postNativeMessage", [message, payload ?? null]);
-  };
-})();
-)script");
+    setSize(width, height);
 
-    auto options =
-        juce::WebBrowserComponent::Options{}
-            .withNativeIntegrationEnabled ()
-            .withUserScript (nativeBridgeScript)
-            .withEventListener ("postNativeMessage", [this] (const juce::var& args) { handleNativeMessage (args); })
-            .withResourceProvider ([this] (const juce::String& path) { return getResource (path); }
-#if ELEM_DEV_LOCALHOST
-                                   ,
-                                   juce::URL ("http://localhost:5173").getOrigin ()
-#endif
-            );
+    choc::ui::WebView::Options opts;
 
-#if JUCE_WINDOWS
-    options = options.withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
-                  .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}.withUserDataFolder (
-                      juce::File::getSpecialLocation (juce::File::SpecialLocationType::tempDirectory)));
+#if JUCE_DEBUG
+    opts.enableDebugMode = true;
 #endif
 
-    webView = std::make_unique<juce::WebBrowserComponent> (options);
-    addAndMakeVisible (*webView);
-    setSize (width, height);
-    webView->setBounds (getLocalBounds ());
+#if ! ELEM_DEV_LOCALHOST
+    opts.fetchResource = [=](const choc::ui::WebView::Options::Path& p) -> std::optional<choc::ui::WebView::Options::Resource> {
+        auto relPath = "." + (p == "/" ? "/index.html" : p);
+        auto f = assetDirectory.getChildFile(relPath);
+        juce::MemoryBlock mb;
 
-#if ELEM_DEV_LOCALHOST
-    webView->goToURL ("http://localhost:5173");
+        if (!f.existsAsFile() || !f.loadFileAsData(mb))
+            return {};
+
+        return choc::ui::WebView::Options::Resource {
+            std::vector<uint8_t>(mb.begin(), mb.end()),
+            getMimeType(f.getFileExtension().toStdString())
+        };
+    };
+#endif
+
+    webView = std::make_unique<choc::ui::WebView>(opts);
+
+#if JUCE_MAC
+    viewContainer.setView(webView->getViewHandle());
+#elif JUCE_WINDOWS
+    viewContainer.setHWND(webView->getViewHandle());
 #else
-    webView->goToURL (juce::WebBrowserComponent::getResourceProviderRoot ());
+#error "We only support MacOS and Windows here yet."
+#endif
+
+    addAndMakeVisible(viewContainer);
+    viewContainer.setBounds(getLocalBounds());
+
+    // Install message passing handlers
+    webView->bind("__postNativeMessage__", [=](const choc::value::ValueView& args) -> choc::value::Value {
+        if (args.isArray()) {
+            auto eventName = args[0].getString();
+
+            // When the webView loads it should send a message telling us that it has established
+            // its message-passing hooks and is ready for a state dispatch
+            if (eventName == "ready") {
+                if (auto* ptr = dynamic_cast<EffectsPluginProcessor*>(getAudioProcessor())) {
+                    ptr->dispatchStateChange();
+                }
+            }
+
+#if ELEM_DEV_LOCALHOST
+            if (eventName == "reload") {
+                if (auto* ptr = dynamic_cast<EffectsPluginProcessor*>(getAudioProcessor())) {
+                    ptr->initJavaScriptEngine();
+                    ptr->dispatchStateChange();
+                }
+            }
+#endif
+
+            if (eventName == "setParameterValue" && args.size() > 1) {
+                return handleSetParameterValueEvent(args[1]);
+            }
+        }
+
+        return {};
+    });
+
+#if ELEM_DEV_LOCALHOST
+    webView->navigate("http://localhost:5173");
 #endif
 }
 
-juce::WebBrowserComponent* WebViewEditor::getWebViewPtr ()
+choc::ui::WebView* WebViewEditor::getWebViewPtr()
 {
-    return webView.get ();
+    return webView.get();
 }
 
 void WebViewEditor::paint (juce::Graphics& g)
 {
-    juce::ignoreUnused (g);
 }
 
-void WebViewEditor::resized ()
+void WebViewEditor::resized()
 {
+    viewContainer.setBounds(getLocalBounds());
 }
 
 //==============================================================================
-std::optional<juce::WebBrowserComponent::Resource> WebViewEditor::getResource (const juce::String& path) const
-{
-    auto relPath = path == "/" ? juce::String ("index.html") : path.trimCharactersAtStart ("/");
-    auto f = assetDirectory.getChildFile (relPath);
-    juce::MemoryBlock mb;
+choc::value::Value WebViewEditor::handleSetParameterValueEvent(const choc::value::ValueView& e) {
+    // When setting a parameter value, we simply tell the host. This will in turn fire
+    // a parameterValueChanged event, which will catch and propagate through dispatching
+    // a state change event
+    if (e.isObject() && e.hasObjectMember("paramId") && e.hasObjectMember("value")) {
+        auto const& paramId = e["paramId"].getString();
+        double const v = numberFromChocValue(e["value"]);
 
-    if (!f.existsAsFile () || !f.loadFileAsData (mb))
-        return {};
-
-    return juce::WebBrowserComponent::Resource{toByteVector (mb), getMimeType (f.getFileExtension ())};
-}
-
-void WebViewEditor::handleNativeMessage (const juce::var& args)
-{
-    const auto* array = args.getArray ();
-
-    if (array == nullptr || array->isEmpty ())
-        return;
-
-    const auto eventName = array->getReference (0).toString ();
-
-    // When the webView loads it should send a message telling us that it has established
-    // its message-passing hooks and is ready for a state dispatch.
-    if (eventName == "ready")
-    {
-        if (auto* ptr = dynamic_cast<EffectsPluginProcessor*> (getAudioProcessor ()))
-            ptr->dispatchStateChange ();
-    }
-
-#if ELEM_DEV_LOCALHOST
-    if (eventName == "reload")
-    {
-        if (auto* ptr = dynamic_cast<EffectsPluginProcessor*> (getAudioProcessor ()))
-        {
-            ptr->initJavaScriptEngine ();
-            ptr->dispatchStateChange ();
-        }
-    }
-#endif
-
-    if (eventName == "setParameterValue" && array->size () > 1)
-        handleSetParameterValueEvent (array->getReference (1));
-}
-
-void WebViewEditor::handleSetParameterValueEvent (const juce::var& e)
-{
-    auto* obj = e.getDynamicObject ();
-
-    if (obj == nullptr)
-        return;
-
-    const auto paramId = obj->getProperty ("paramId").toString ();
-    const auto v = numberFromVar (obj->getProperty ("value"));
-
-    for (auto& p : getAudioProcessor ()->getParameters ())
-    {
-        if (auto* pf = dynamic_cast<juce::AudioParameterFloat*> (p))
-        {
-            if (pf->paramID == paramId)
-            {
-                pf->setValueNotifyingHost (static_cast<float> (v));
-                break;
+        for (auto& p : getAudioProcessor()->getParameters()) {
+            if (auto* pf = dynamic_cast<juce::AudioParameterFloat*>(p)) {
+                if (pf->paramID.toStdString() == paramId) {
+                    pf->setValueNotifyingHost(v);
+                    break;
+                }
             }
         }
     }
+
+    return choc::value::Value();
 }
