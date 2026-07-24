@@ -35,8 +35,6 @@ std::vector<std::byte> toByteVector (const juce::MemoryBlock& block)
 WebViewEditor::WebViewEditor (juce::AudioProcessor* proc, juce::File const& assets, int width, int height)
     : juce::AudioProcessorEditor (proc), assetDirectory (assets)
 {
-    setSize (width, height);
-
     const auto nativeBridgeScript = juce::String (R"script(
 (function() {
   globalThis.__postNativeMessage__ = function(message, payload) {
@@ -65,6 +63,7 @@ WebViewEditor::WebViewEditor (juce::AudioProcessor* proc, juce::File const& asse
 
     webView = std::make_unique<juce::WebBrowserComponent> (options);
     addAndMakeVisible (*webView);
+    setSize (width, height);
     webView->setBounds (getLocalBounds ());
 
 #if ELEM_DEV_LOCALHOST
@@ -86,7 +85,6 @@ void WebViewEditor::paint (juce::Graphics& g)
 
 void WebViewEditor::resized ()
 {
-    webView->setBounds (getLocalBounds ());
 }
 
 //==============================================================================

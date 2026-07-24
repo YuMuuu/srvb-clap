@@ -2,14 +2,15 @@ import { useStore as useZustandStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
 import Interface from './Interface'
+import {defaultPluginState, type ParamId} from './shared/parameters';
 
-const store = createStore<PluginState>(() => ({}));
+const store = createStore<PluginState>(() => ({...defaultPluginState}));
 const useStore = () => useZustandStore(store);
 
 const errorStore = createStore<{ error: PluginError | null }>(() => ({ error: null }));
 const useErrorStore = () => useZustandStore(errorStore);
 
-function requestParamValueUpdate(paramId: string, value: number) {
+function requestParamValueUpdate(paramId: ParamId, value: number) {
   if (typeof globalThis.__postNativeMessage__ === 'function') {
     globalThis.__postNativeMessage__("setParameterValue", {
       paramId,

@@ -1,7 +1,7 @@
 import {Renderer, el} from '@elemaudio/core';
 import {RefMap} from './RefMap';
 import srvb from './srvb';
-import {parseDspState, parseJsonObject, type HydratedNode, type DspState, type JsonValue} from './types';
+import {parseDspState, type HydratedNode, type DspState, type HydrationData, type JsonValue} from './types';
 
 // This project demonstrates writing a small FDN reverb effect in Elementary.
 //
@@ -80,7 +80,7 @@ globalThis.__receiveStateChange__ = (serializedState: string) => {
 // the JavaScript engine and then inject necessary state for coordinating with
 // the underlying engine.
 globalThis.__receiveHydrationData__ = (data: string) => {
-  const payload = parseJsonObject(data, 'hydration data');
+  const payload = JSON.parse(data) as HydrationData;
   const nodeMap = getRendererNodeMap(core);
 
   for (const [k, v] of Object.entries(payload)) {
