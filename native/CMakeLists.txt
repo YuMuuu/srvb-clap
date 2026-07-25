@@ -11,6 +11,8 @@ option(ELEM_DEV_LOCALHOST "Run against localhost for static assets" OFF)
 
 add_subdirectory(juce)
 add_subdirectory(elementary/runtime)
+add_subdirectory(clap)
+add_subdirectory(clap-helpers)
 
 juce_add_plugin(${TARGET_NAME}
   BUNDLE_ID "audio.elementary.srvb"
@@ -56,6 +58,7 @@ endif()
 
 target_sources(${TARGET_NAME}
   PRIVATE
+  ClapPluginProcessor.cpp
   PluginProcessor.cpp
   WebViewEditor.cpp)
 
@@ -88,4 +91,5 @@ target_link_libraries(${TARGET_NAME}
   juce::juce_graphics
   juce::juce_gui_basics
   juce::juce_gui_extra
+  clap-helpers
   runtime)
