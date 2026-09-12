@@ -150,6 +150,11 @@ public:
     void flushParameters (const clap_input_events_t* input, const clap_output_events_t* output)
     {
         receiveEvents (input);
+        sendParameterChanges (output);
+    }
+
+    void sendParameterChanges (const clap_output_events_t* output)
+    {
         if (!output)
             return;
         for (size_t i = 0; i < parameters.size (); ++i)
@@ -510,6 +515,7 @@ Plugin::Plugin (const clap_host_t* pluginHost, std::filesystem::path sourcePath)
             std::fill_n (channel, process->frames_count, 0.0f);
         output.constant_mask = 0;
         p.receiveEvents (process->in_events);
+        p.sendParameterChanges (process->out_events);
         p.engine->process (inputs, 2, outputs, 2, process->frames_count);
         return CLAP_PROCESS_CONTINUE;
     };
