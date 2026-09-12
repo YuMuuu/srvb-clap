@@ -38,6 +38,16 @@ make_clapfirst_plugins(
   ASSET_OUTPUT_DIRECTORY "${SRVB_CLAP_OUTPUT_DIRECTORY}"
   RESOURCE_DIRECTORY "${SRVB_RESOURCE_DIRECTORY}")
 
+if(WIN32 AND NOT ELEM_DEV_LOCALHOST)
+  foreach(plugin_target IN ITEMS SRVB_clap SRVB_vst3)
+    add_custom_command(TARGET ${plugin_target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${SRVB_RESOURCE_DIRECTORY}"
+        "$<TARGET_FILE_DIR:${plugin_target}>/SRVB.resources"
+      VERBATIM)
+  endforeach()
+endif()
+
 if(APPLE)
   add_custom_command(TARGET SRVB_clap POST_BUILD
     COMMAND codesign --force --sign - "$<TARGET_BUNDLE_DIR:SRVB_clap>"

@@ -78,6 +78,9 @@ is relocatable, thereby enabling distribution to end users.
   CLAP and VST3 bundles are available in
   `./native/build/clap/SRVB_artefacts/<Debug|Release>`.
   Copy the required bundle to the plug-in directory used by your host.
+  On Windows, the outputs are under `CLAP/` and `VST3/`. Keep `SRVB.resources`
+  beside the CLAP binary when installing it. For VST3, copy the entire `.vst3`
+  directory, which includes the resources beside its binary.
 * **Note**: especially on MacOS, certain plugin hosts such as Ableton Live have
   strict security settings that prevent them from recognizing local unsigned
   binaries. You'll want to either add a codesign step to your build, or

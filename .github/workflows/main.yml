@@ -61,3 +61,8 @@ jobs:
           path: |
             native/build/clap/SRVB_artefacts/Release/SRVB.clap
             native/build/clap/SRVB_artefacts/Release/SRVB.vst3
+            native/build/clap/SRVB_artefacts/Release/CLAP/
+            native/build/clap/SRVB_artefacts/Release/VST3/
+            !native/build/clap/SRVB_artefacts/Release/**/*.lib
+            !native/build/clap/SRVB_artefacts/Release/**/*.exp
+          if-no-files-found: error
