@@ -15,6 +15,7 @@
     "dev-native": "zx scripts/build-native.mjs --dev",
     "dev-dsp": "esbuild dsp/main.ts --watch --bundle --outfile=public/dsp.main.js",
     "build-native": "zx scripts/build-native.mjs",
+    "build-clap": "pnpm run build-native && zx scripts/build-clap.mjs",
     "build-dsp": "esbuild dsp/main.ts --bundle --outfile=public/dsp.main.js",
     "build-ui": "vite build",
     "build": "pnpm run build-dsp && pnpm run build-ui && pnpm run build-native",

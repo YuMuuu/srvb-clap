@@ -1,6 +1,18 @@
 cmake_minimum_required(VERSION 3.15)
 project(Elem_SRVB VERSION 0.1.0)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(APPLE AND (NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 10.15))
+  set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15 CACHE STRING "Minimum macOS version" FORCE)
+endif()
+
+if(APPLE)
+  enable_language(OBJC)
+  enable_language(OBJCXX)
+endif()
 
 set(TARGET_NAME SRVB)
 set(ASSETS_DIR ${CMAKE_SOURCE_DIR}/../dist/)
@@ -8,8 +20,9 @@ set(ASSETS_DIR ${CMAKE_SOURCE_DIR}/../dist/)
 option(JUCE_ENABLE_MODULE_SOURCE_GROUPS "Enable Module Source Groups" ON)
 option(JUCE_BUILD_EXTRAS "Build JUCE Extras" OFF)
 option(ELEM_DEV_LOCALHOST "Run against localhost for static assets" OFF)
+option(SRVB_BUILD_JUCE "Build the existing JUCE AU/VST3 plugins" ON)
+option(SRVB_BUILD_CLAP "Build the headless CLAP plugin" OFF)
 
-add_subdirectory(juce)
 add_subdirectory(elementary/runtime)
 
 add_library(dsp_engine STATIC DspEngine.cpp)
@@ -19,6 +32,16 @@ target_include_directories(dsp_engine PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/choc/javascript)
 target_link_libraries(dsp_engine PUBLIC runtime)
+
+if(SRVB_BUILD_CLAP)
+  include(cmake/Clap.cmake)
+endif()
+
+if(NOT SRVB_BUILD_JUCE)
+  return()
+endif()
+
+add_subdirectory(juce)
 
 juce_add_plugin(${TARGET_NAME}
   BUNDLE_ID "audio.elementary.srvb"

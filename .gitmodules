@@ -8,3 +8,9 @@
 [submodule "choc"]
 	path = native/choc
 	url = https://github.com/nick-thompson/choc.git
+[submodule "native/clap"]
+	path = native/clap
+	url = https://github.com/free-audio/clap.git
+[submodule "native/clap-wrapper"]
+	path = native/clap-wrapper
+	url = https://github.com/free-audio/clap-wrapper.git

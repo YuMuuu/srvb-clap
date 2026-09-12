@@ -35,6 +35,17 @@ void DspEngine::process (const float** inputs, size_t numInputs, float** outputs
         runtime->process (inputs, numInputs, outputs, numOutputs, numSamples, nullptr);
 }
 
+void DspEngine::release ()
+{
+    runtime.reset ();
+}
+
+void DspEngine::reset ()
+{
+    if (runtime)
+        runtime->reset ();
+}
+
 void DspEngine::reloadJavaScript ()
 {
     jsContext = choc::javascript::createQuickJSContext ();
