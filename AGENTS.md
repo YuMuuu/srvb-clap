@@ -115,7 +115,7 @@ Viteから`dsp.main.js`を取得してWebView経由で渡す。開発版の初�
 
 ## 現在認識している制約
 
-- CLAP版GUIは800x704固定サイズで、floating windowとresizeには対応しない。
+- CLAP版GUIは720x444固定サイズで、floating windowとresizeには対応しない。
 - パラメータ更新はサンプル精度ではない。
 - offline rendering時もメインスレッドのcallback schedulingに依存する。
 - `reset`はElementary Runtimeの既存resetへ委譲しており、delay/tapのresetには既知の制約がある。

@@ -54,8 +54,8 @@ size_t parameterIndex (const std::string& key)
     return parameters.size ();
 }
 
-constexpr uint32_t editorWidth = 800;
-constexpr uint32_t editorHeight = 704;
+constexpr uint32_t editorWidth = 720;
+constexpr uint32_t editorHeight = 444;
 
 const char* editorApi ()
 {
