@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
+
+if(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 project(Elem_SRVB VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
