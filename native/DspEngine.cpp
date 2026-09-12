@@ -110,7 +110,8 @@ void DspEngine::dispatchStateChange ()
     const auto script =
         callbackScript ("__receiveStateChange__", elem::js::serialize (elem::js::serialize (localState)));
     callbacks.evaluateEditorScript (script);
-    jsContext.evaluate (script);
+    if (runtime)
+        jsContext.evaluate (script);
 }
 
 void DspEngine::dispatchError (const std::string& name, const std::string& message)
