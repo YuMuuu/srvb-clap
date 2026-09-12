@@ -3,7 +3,7 @@
 ## 目的
 
 このリポジトリは、JUCEを土台にしたSRVBプラグインテンプレートを、
-`CLAP + clap-wrapper + CHOC + React` 構成へ移行する途中にある。
+`CLAP + clap-wrapper + CHOC + React` 構成へ移行したものである。
 
 最終的な構成は次を目指す。
 
@@ -13,7 +13,7 @@
 - WebView: CHOC
 - UI: React/Vite
 - DSP記述: Elementary Audio
-- JUCE依存: 最終段階で撤去
+- JUCE依存: 撤去済み
 
 ## 合意済みの方針
 
@@ -49,18 +49,17 @@
 - CLAP SDKは`native/clap` submoduleとして追加済み。
 - この段階は実装・ビルド・ユーザーレビュー済み。
 
-### 先行実装済み: clap-wrapperによるVST3出力
+### 完了: clap-wrapperによるVST3出力
 
 - `native/clap-wrapper` submoduleを追加した。
 - `native/cmake/Clap.cmake`でclap-wrapperのclap-first targetを構成した。
 - CLAP実装を静的リンクした自己完結型VST3を生成する。実行時に`SRVB.clap`を必要としない。
-- `pnpm run build-clap`でCLAPとVST3の両方を生成する。
+- `pnpm run build`でCLAPとVST3の両方を生成する。
 - macOSでCLAP/VST3 bundleをad-hoc codesignする。
 - ビルド成功を確認済み。成果物は次に出力される。
   - `native/build/clap/SRVB_artefacts/Release/SRVB.clap`
   - `native/build/clap/SRVB_artefacts/Release/SRVB.vst3`
-- 実DAWでのVST3読み込みと音声処理はユーザーレビュー待ち。
-- clap-wrapper接続は先行しているが、JUCEをまだ撤去していないため最終段階全体は未完了。
+- 実DAWでのVST3読み込みとUI表示を確認済み。
 
 ### 完了: WebViewと開発環境の移植
 
@@ -71,12 +70,14 @@
 - macOS向けRelease/DebugのCLAP/VST3ビルドは確認済み。
 - 実DAWでの表示・操作を確認し、ユーザーレビュー済み。
 
-### 未着手: JUCE撤去と最終整理
+### 完了: JUCE撤去と最終整理
 
-- CHOC WebView移植をレビュー後、JUCE版targetとJUCE固有コードを撤去する。
-- JUCE submodule、JUCE専用CMake設定、不要になったソースとドキュメントを整理する。
-- CLAPとclap-wrapper VST3を正式な標準ビルドにする。
-- 最終的なビルド確認後、ユーザーへレビューを依頼する。
+- JUCE版targetとJUCE固有コードを撤去した。
+- JUCE submoduleとJUCE専用CMake設定を撤去した。
+- CLAPとclap-wrapper VST3を標準ビルドにした。
+- CIとドキュメントをCLAP/VST3構成へ更新した。
+- `pnpm run build`と`pnpm run dev-native`の成功を確認済み。
+- ユーザーレビュー済み。
 
 ## 移行タスク
 
@@ -87,9 +88,9 @@
 3. GUIなしのCLAP版を成立させる: 完了、commit済み。
 4. オートメーションとスレッド間通信を固める: 対象外、別チケット。
 5. WebViewと開発環境をCHOC + Reactへ移植する: 完了。
-6. clap-wrapperを接続しJUCEを撤去する: VST3出力のみ先行実装済み。JUCE撤去は未着手。
+6. clap-wrapperを接続しJUCEを撤去する: 完了。
 
-次に行う作業は、段階6のJUCE撤去と最終整理である。
+合意した移行タスクは完了している。
 
 ## ビルドコマンド
 
@@ -97,26 +98,20 @@
 
 ```bash
 pnpm install
-pnpm run build-clap
+pnpm run build
 ```
 
-`build`がDSP、React UI、nativeの順にビルドする。`build-clap`は`build`の完了後、JUCEを無効にして
-CLAPとclap-wrapper VST3をRelease buildする。
+`build`がDSP、React UI、nativeの順にビルドする。native buildはCLAPとclap-wrapper VST3を
+Release buildする。
 
 CLAP版のdevelopment buildとVite serverは次で起動する。
 
 ```bash
-pnpm run dev-clap
+pnpm run dev
 ```
 
-`dev-clap-native`はnativeのみビルドする。開発版にはDSPを同梱せず、UI起動時とDSP更新時に
+`dev-native`はnativeのみビルドする。開発版にはDSPを同梱せず、UI起動時とDSP更新時に
 Viteから`dsp.main.js`を取得してWebView経由で渡す。開発版の初回DSP読み込みにはUIを開く必要がある。
-
-既存JUCE版の通常ビルドは移行完了まで残している。
-
-```bash
-pnpm run build
-```
 
 ## 現在認識している制約
 
