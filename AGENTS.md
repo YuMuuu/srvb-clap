@@ -39,7 +39,7 @@
 - 既存JUCE版は`DspEngine`を所有して利用する構成へ変更した。
 - この段階はcommit済み。
 
-### 作業中: GUIなしCLAP版
+### 完了: GUIなしCLAP版
 
 - `native/ClapPlugin.cpp`にCLAP entry/factoryと最小限のプラグイン実装を追加した。
 - `native/ClapEntry.cpp`に共有entry pointを分離した。
@@ -47,7 +47,7 @@
 - DSP資産として`public/dsp.main.js`をプラグインbundleへ同梱する。
 - パラメータイベントは既存挙動に合わせ、メインスレッドでElementaryへ反映する。
 - CLAP SDKは`native/clap` submoduleとして追加済み。
-- この段階は実装・ビルド済みであり、実DAWでのユーザーレビュー待ち。
+- この段階は実装・ビルド・ユーザーレビュー済み。
 
 ### 先行実装済み: clap-wrapperによるVST3出力
 
@@ -62,12 +62,14 @@
 - 実DAWでのVST3読み込みと音声処理はユーザーレビュー待ち。
 - clap-wrapper接続は先行しているが、JUCEをまだ撤去していないため最終段階全体は未完了。
 
-### 未着手: WebViewと開発環境の移植
+### 完了: WebViewと開発環境の移植
 
-- CLAP版には現在GUIがない。
-- CHOC WebViewとReact UIをCLAP版へ接続する。
-- release buildではUI bundleをプラグインへ同梱する。
-- development buildではVite dev serverとhot reloadを利用できるようにする。
+- `native/ClapEditor.h`と`native/ClapEditor.cpp`でCHOC WebViewをCLAP GUI extensionへ接続した。
+- release buildでは`dist`のReact UIとDSP bundleをプラグインへ同梱する。
+- development buildではVite dev serverを表示し、DSPのhot reloadをWebView経由でElementaryへ反映する。
+- UIからのパラメータ変更はCLAP params flushでホストへ通知する。
+- macOS向けRelease/DebugのCLAP/VST3ビルドは確認済み。
+- 実DAWでの表示・操作を確認し、ユーザーレビュー済み。
 
 ### 未着手: JUCE撤去と最終整理
 
@@ -82,12 +84,12 @@
 
 1. 現行動作の記録と互換性決定: スキップ。
 2. JUCEからDSPと状態管理を切り出す: 完了、commit済み。
-3. GUIなしのCLAP版を成立させる: 実装・ビルド済み、実DAWでのユーザーレビュー待ち。
+3. GUIなしのCLAP版を成立させる: 完了、commit済み。
 4. オートメーションとスレッド間通信を固める: 対象外、別チケット。
-5. WebViewと開発環境をCHOC + Reactへ移植する: 未着手。
+5. WebViewと開発環境をCHOC + Reactへ移植する: 完了。
 6. clap-wrapperを接続しJUCEを撤去する: VST3出力のみ先行実装済み。JUCE撤去は未着手。
 
-次に行う作業は、段階3の実DAWレビュー結果への対応である。承認後に段階5へ進む。
+次に行う作業は、段階6のJUCE撤去と最終整理である。
 
 ## ビルドコマンド
 
@@ -98,7 +100,17 @@ pnpm install
 pnpm run build-clap
 ```
 
-`build-clap`は`build-native`の完了後、JUCEを無効にしてCLAPとclap-wrapper VST3をRelease buildする。
+`build`がDSP、React UI、nativeの順にビルドする。`build-clap`は`build`の完了後、JUCEを無効にして
+CLAPとclap-wrapper VST3をRelease buildする。
+
+CLAP版のdevelopment buildとVite serverは次で起動する。
+
+```bash
+pnpm run dev-clap
+```
+
+`dev-clap-native`はnativeのみビルドする。開発版にはDSPを同梱せず、UI起動時とDSP更新時に
+Viteから`dsp.main.js`を取得してWebView経由で渡す。開発版の初回DSP読み込みにはUIを開く必要がある。
 
 既存JUCE版の通常ビルドは移行完了まで残している。
 
@@ -108,7 +120,7 @@ pnpm run build
 
 ## 現在認識している制約
 
-- CLAP版はGUIを持たず、ホストのgeneric editorを使用する。
+- CLAP版GUIは800x704固定サイズで、floating windowとresizeには対応しない。
 - パラメータ更新はサンプル精度ではない。
 - offline rendering時もメインスレッドのcallback schedulingに依存する。
 - `reset`はElementary Runtimeの既存resetへ委譲しており、delay/tapのresetには既知の制約がある。
@@ -117,6 +129,11 @@ pnpm run build
 
 ## 作業上の注意
 
+- VST3再配置後はAudioPluginHostの「Scan for new or updated VST3 plug-ins」を実行する。登録キャッシュを直接編集しない。
+- 2026-09-13の比較確認では、ready遅延を除去、Viteのscript変換を除去、IDを元の`audio.elementary.srvb`へ復帰、の順で各版を再配置・再スキャンして正常描画を確認した。これらの対策は撤去済み。
+- 元のCLAP ID由来のVST3 CIDは`91F6CB342BF95DD19A93D537288CC490`で、旧JUCE版のCIDとは異なる。以前の「ID衝突が白画面原因」という断定は撤回する。白画面自体は比較中に再現しておらず、根本原因は未確定。
+
 - 新しいテスト基盤やDSPテストを追加しないこと。
+- VST3をユーザーのプラグインフォルダへ再配置するときは、既存の`SRVB.vst3`を削除してからコピーする。旧bundleは一時退避しない。
 - 段階をまたぐ大きな変更を一度に行わないこと。
 - 各段階の完了時には、変更内容、ビルド結果、未確認事項を簡潔に示してユーザーへレビューを依頼すること。

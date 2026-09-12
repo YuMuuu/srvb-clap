@@ -1,3 +1,4 @@
+#include "ClapEditor.h"
 #include "DspEngine.h"
 
 #include <clap/clap.h>
@@ -45,6 +46,28 @@ size_t parameterIndex (clap_id id)
     return parameters.size ();
 }
 
+size_t parameterIndex (const std::string& key)
+{
+    for (size_t i = 0; i < parameters.size (); ++i)
+        if (parameters[i].key == key)
+            return i;
+    return parameters.size ();
+}
+
+constexpr uint32_t editorWidth = 800;
+constexpr uint32_t editorHeight = 704;
+
+const char* editorApi ()
+{
+#if defined(__APPLE__)
+    return CLAP_WINDOW_API_COCOA;
+#elif defined(_WIN32)
+    return CLAP_WINDOW_API_WIN32;
+#else
+    return "";
+#endif
+}
+
 class Plugin
 {
 public:
@@ -62,15 +85,27 @@ public:
         hostParams = static_cast<const clap_host_params_t*> (host->get_extension (host, CLAP_EXT_PARAMS));
         try
         {
+#if !ELEM_DEV_LOCALHOST
             std::ifstream file (dspPath, std::ios::binary);
             if (!file)
                 throw std::runtime_error ("Cannot open bundled dsp.main.js");
             source.assign (std::istreambuf_iterator<char> (file), std::istreambuf_iterator<char> ());
             if (file.bad () || source.empty ())
                 throw std::runtime_error ("Cannot read bundled dsp.main.js");
-            engine = std::make_unique<DspEngine> (DspEngine::Callbacks{
-                [this] () -> std::optional<std::string> { return source; }, [] (const std::string&) {},
-                [this] (const std::string& message) { log (CLAP_LOG_INFO, message.c_str ()); }});
+#endif
+            engine = std::make_unique<DspEngine> (DspEngine::Callbacks{[this] () -> std::optional<std::string>
+                                                                       {
+                                                                           if (source.empty ())
+                                                                               return std::nullopt;
+                                                                           return source;
+                                                                       },
+                                                                       [this] (const std::string& script)
+                                                                       {
+                                                                           if (editor)
+                                                                               editor->evaluateJavascript (script);
+                                                                       },
+                                                                       [this] (const std::string& message)
+                                                                       { log (CLAP_LOG_INFO, message.c_str ()); }});
             syncParameters ();
             return true;
         }
@@ -112,6 +147,52 @@ public:
             host->request_callback (host);
     }
 
+    void flushParameters (const clap_input_events_t* input, const clap_output_events_t* output)
+    {
+        receiveEvents (input);
+        if (!output)
+            return;
+        for (size_t i = 0; i < parameters.size (); ++i)
+        {
+            if (!editorChanges[i].exchange (false))
+                continue;
+            const clap_event_param_value_t event{
+                {sizeof (clap_event_param_value_t), 0, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_PARAM_VALUE, 0},
+                parameters[i].id,
+                nullptr,
+                -1,
+                -1,
+                -1,
+                -1,
+                values[i].load ()};
+            if (!output->try_push (output, &event.header))
+                editorChanges[i].store (true);
+        }
+    }
+
+    void setParameterFromEditor (const std::string& key, double value)
+    {
+        const auto index = parameterIndex (key);
+        if (index == parameters.size () || !std::isfinite (value))
+            return;
+        const auto normalized = std::clamp (value, 0.0, 1.0);
+        values[index].store (normalized);
+        engine->setParameter (parameters[index].key, normalized);
+        engine->dispatchStateChange ();
+        editorChanges[index].store (true);
+        if (hostParams)
+            hostParams->request_flush (host);
+    }
+
+    void reloadJavaScript (std::optional<std::string> newSource)
+    {
+        if (newSource && !newSource->empty ())
+            source = std::move (*newSource);
+        if (active)
+            engine->reloadJavaScript ();
+        engine->dispatchStateChange ();
+    }
+
     void update ()
     {
         if (!dirty.exchange (false))
@@ -133,9 +214,11 @@ public:
     const clap_host_params_t* hostParams = nullptr;
     std::string source;
     std::unique_ptr<DspEngine> engine;
+    std::unique_ptr<ClapEditor> editor;
     // Parameter values cross the audio/main-thread boundary; DSP state itself
     // stays in DspEngine and is updated only by the main-thread callback.
     std::array<std::atomic<double>, parameters.size ()> values{};
+    std::array<std::atomic<bool>, parameters.size ()> editorChanges{};
     std::atomic<bool> dirty{false};
     bool active = false;
     uint32_t maxFrames = 0;
@@ -198,8 +281,8 @@ const clap_plugin_params_t params = {
         *value = parsed;
         return true;
     },
-    [] (const clap_plugin_t* plugin, const clap_input_events_t* in, const clap_output_events_t*)
-    { Plugin::self (plugin).receiveEvents (in); }};
+    [] (const clap_plugin_t* plugin, const clap_input_events_t* in, const clap_output_events_t* out)
+    { Plugin::self (plugin).flushParameters (in, out); }};
 
 const clap_plugin_state_t state = {
     [] (const clap_plugin_t* plugin, const clap_ostream_t* stream) -> bool
@@ -273,6 +356,87 @@ const clap_plugin_latency_t latency = {[] (const clap_plugin_t*) -> uint32_t { r
 // Decay can reach unity. Keep the reverb running instead of guessing a finite tail.
 const clap_plugin_tail_t tail = {[] (const clap_plugin_t*) -> uint32_t { return INT32_MAX; }};
 
+const clap_plugin_gui_t gui = {[] (const clap_plugin_t*, const char* api, bool floating) -> bool
+                               { return !floating && api && std::strcmp (api, editorApi ()) == 0; },
+                               [] (const clap_plugin_t*, const char** api, bool* floating) -> bool
+                               {
+                                   if (!api || !floating || !*editorApi ())
+                                       return false;
+                                   *api = editorApi ();
+                                   *floating = false;
+                                   return true;
+                               },
+                               [] (const clap_plugin_t* plugin, const char* api, bool floating) -> bool
+                               {
+                                   auto& p = Plugin::self (plugin);
+                                   if (p.editor || floating || !api || std::strcmp (api, editorApi ()) != 0)
+                                       return false;
+                                   try
+                                   {
+                                       p.editor = std::make_unique<ClapEditor> (
+                                           p.dspPath.parent_path (),
+                                           ClapEditor::Callbacks{[instance = &p]
+                                                                 { instance->engine->dispatchStateChange (); },
+                                                                 [instance = &p] (std::optional<std::string> source)
+                                                                 { instance->reloadJavaScript (std::move (source)); },
+                                                                 [instance = &p] (const std::string& key, double value)
+                                                                 { instance->setParameterFromEditor (key, value); }});
+                                       return true;
+                                   }
+                                   catch (const std::exception& error)
+                                   {
+                                       p.log (CLAP_LOG_ERROR, error.what ());
+                                       return false;
+                                   }
+                               },
+                               [] (const clap_plugin_t* plugin) { Plugin::self (plugin).editor.reset (); },
+                               [] (const clap_plugin_t*, double) -> bool { return false; },
+                               [] (const clap_plugin_t* plugin, uint32_t* width, uint32_t* height) -> bool
+                               {
+                                   if (!Plugin::self (plugin).editor || !width || !height)
+                                       return false;
+                                   *width = editorWidth;
+                                   *height = editorHeight;
+                                   return true;
+                               },
+                               [] (const clap_plugin_t*) -> bool { return false; },
+                               [] (const clap_plugin_t*, clap_gui_resize_hints_t*) -> bool { return false; },
+                               [] (const clap_plugin_t*, uint32_t*, uint32_t*) -> bool { return false; },
+                               [] (const clap_plugin_t* plugin, uint32_t width, uint32_t height) -> bool
+                               {
+                                   auto& editor = Plugin::self (plugin).editor;
+                                   if (!editor || width != editorWidth || height != editorHeight)
+                                       return false;
+                                   editor->setSize (width, height);
+                                   return true;
+                               },
+                               [] (const clap_plugin_t* plugin, const clap_window_t* parent) -> bool
+                               {
+                                   auto& editor = Plugin::self (plugin).editor;
+                                   if (!editor || !parent || !editor->setParent (*parent))
+                                       return false;
+                                   editor->setSize (editorWidth, editorHeight);
+                                   return true;
+                               },
+                               [] (const clap_plugin_t*, const clap_window_t*) -> bool { return false; },
+                               [] (const clap_plugin_t*, const char*) {},
+                               [] (const clap_plugin_t* plugin) -> bool
+                               {
+                                   auto& editor = Plugin::self (plugin).editor;
+                                   if (!editor)
+                                       return false;
+                                   editor->setVisible (true);
+                                   return true;
+                               },
+                               [] (const clap_plugin_t* plugin) -> bool
+                               {
+                                   auto& editor = Plugin::self (plugin).editor;
+                                   if (!editor)
+                                       return false;
+                                   editor->setVisible (false);
+                                   return true;
+                               }};
+
 const void* CLAP_ABI getExtension (const clap_plugin_t*, const char* id)
 {
     if (!std::strcmp (id, CLAP_EXT_AUDIO_PORTS))
@@ -285,6 +449,8 @@ const void* CLAP_ABI getExtension (const clap_plugin_t*, const char* id)
         return &latency;
     if (!std::strcmp (id, CLAP_EXT_TAIL))
         return &tail;
+    if (!std::strcmp (id, CLAP_EXT_GUI))
+        return &gui;
     return nullptr;
 }
 
@@ -293,6 +459,8 @@ Plugin::Plugin (const clap_host_t* pluginHost, std::filesystem::path sourcePath)
 {
     for (auto& value : values)
         value.store (0.5);
+    for (auto& changed : editorChanges)
+        changed.store (false);
     plugin.desc = &descriptor;
     plugin.plugin_data = this;
     plugin.init = [] (const clap_plugin_t* plugin) { return self (plugin).init (); };

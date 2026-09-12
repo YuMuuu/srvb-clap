@@ -1,15 +1,28 @@
 add_subdirectory(clap)
 add_subdirectory(clap-wrapper)
 
-set(SRVB_RESOURCE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../public")
-if(NOT EXISTS "${SRVB_RESOURCE_DIRECTORY}/dsp.main.js")
-  message(FATAL_ERROR "Run pnpm run build-dsp before configuring the CLAP target.")
+if(NOT ELEM_DEV_LOCALHOST)
+  set(SRVB_RESOURCE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../dist")
+  if(NOT EXISTS "${SRVB_RESOURCE_DIRECTORY}/dsp.main.js")
+    message(FATAL_ERROR "Build the JavaScript assets before configuring the CLAP target.")
+  endif()
+  if(NOT EXISTS "${SRVB_RESOURCE_DIRECTORY}/index.html")
+    message(FATAL_ERROR "Run pnpm run build-ui before configuring the release CLAP target.")
+  endif()
 endif()
 
-add_library(srvb_clap_impl STATIC ClapPlugin.cpp)
+add_library(srvb_clap_impl STATIC ClapEditor.cpp ClapPlugin.cpp)
 set_target_properties(srvb_clap_impl PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_features(srvb_clap_impl PUBLIC cxx_std_17)
+target_compile_definitions(srvb_clap_impl PRIVATE ELEM_DEV_LOCALHOST=$<BOOL:${ELEM_DEV_LOCALHOST}>)
+target_include_directories(srvb_clap_impl PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/choc/gui
+  ${CMAKE_CURRENT_SOURCE_DIR}/choc/text)
 target_link_libraries(srvb_clap_impl PUBLIC clap PRIVATE dsp_engine)
+
+if(APPLE)
+  target_link_libraries(srvb_clap_impl PRIVATE "-framework WebKit")
+endif()
 
 set(SRVB_CLAP_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/SRVB_artefacts/${CMAKE_BUILD_TYPE}")
 make_clapfirst_plugins(
