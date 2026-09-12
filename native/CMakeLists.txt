@@ -12,6 +12,14 @@ option(ELEM_DEV_LOCALHOST "Run against localhost for static assets" OFF)
 add_subdirectory(juce)
 add_subdirectory(elementary/runtime)
 
+add_library(dsp_engine STATIC DspEngine.cpp)
+set_target_properties(dsp_engine PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_compile_features(dsp_engine PUBLIC cxx_std_17)
+target_include_directories(dsp_engine PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/choc/javascript)
+target_link_libraries(dsp_engine PUBLIC runtime)
+
 juce_add_plugin(${TARGET_NAME}
   BUNDLE_ID "audio.elementary.srvb"
   COMPANY_NAME "Elementary Audio"
@@ -88,4 +96,4 @@ target_link_libraries(${TARGET_NAME}
   juce::juce_graphics
   juce::juce_gui_basics
   juce::juce_gui_extra
-  runtime)
+  dsp_engine)

@@ -3,8 +3,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
-#include <choc_javascript.h>
-#include <elem/Runtime.h>
+#include "DspEngine.h"
 
 class NativeBridgeObject;
 
@@ -74,12 +73,9 @@ private:
     double lastKnownSampleRate = 0;
     int lastKnownBlockSize = 0;
 
-    elem::js::Object state;
-    choc::javascript::Context jsContext;
+    DspEngine engine;
 
     juce::AudioBuffer<float> scratchBuffer;
-
-    std::unique_ptr<elem::Runtime<float>> runtime;
 
     //==============================================================================
     // A simple "dirty list" abstraction here for propagating realtime parameter
