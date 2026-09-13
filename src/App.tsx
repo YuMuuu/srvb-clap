@@ -20,13 +20,22 @@ function requestParamValueUpdate(paramId: ParamId, value: number) {
 }
 
 if (import.meta.env.DEV && import.meta.hot) {
-  import.meta.hot.on('reload-dsp', () => {
+  const reloadDsp = async () => {
     console.log('Sending reload dsp message');
 
     if (typeof globalThis.__postNativeMessage__ === 'function') {
-      globalThis.__postNativeMessage__('reload');
+      try {
+        const response = await fetch('/dsp.main.js');
+        if (!response.ok) throw new Error(`Failed to reload DSP: ${response.status}`);
+        const source = await response.text();
+        globalThis.__postNativeMessage__('reload', {source});
+      } catch (error) {
+        console.error(error);
+      }
     }
-  });
+  };
+  import.meta.hot.on('reload-dsp', reloadDsp);
+  void reloadDsp();
 }
 
 globalThis.__receiveStateChange__ = function(state: string) {

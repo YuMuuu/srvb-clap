@@ -12,10 +12,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Disabling the linux build for now
-        # os: [ubuntu-latest, macos-14, windows-latest]
-        # Pin macOS until JUCE stops using CGWindowListCreateImage,
-        # which is unavailable in newer SDKs.
         os: [macos-14, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -30,24 +26,6 @@ jobs:
       - name: Enable Corepack
         shell: bash
         run: corepack enable
-
-      - name: JUCE Linux Dependencies
-        shell: bash
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y freeglut3-dev
-          sudo apt-get install -y g++
-          sudo apt-get install -y libasound2-dev
-          sudo apt-get install -y libcurl4-openssl-dev
-          sudo apt-get install -y libfreetype6-dev
-          sudo apt-get install -y libjack-jackd2-dev
-          sudo apt-get install -y libx11-dev
-          sudo apt-get install -y libxcomposite-dev
-          sudo apt-get install -y libxcursor-dev
-          sudo apt-get install -y libxinerama-dev
-          sudo apt-get install -y libxrandr-dev
-          sudo apt-get install -y mesa-common-dev
 
       - name: Install dependencies
         shell: bash
@@ -81,7 +59,10 @@ jobs:
         with:
           name: srvb-${{ env.ARTIFACT_OS }}-${{ env.ARTIFACT_DATESTRING }}
           path: |
-            native/build/scripted/SRVB_artefacts/Release/VST3/
-            native/build/scripted/SRVB_artefacts/Release/AU/
-            !native/build/scripted/SRVB_artefacts/Release/VST3/*.lib
-            !native/build/scripted/SRVB_artefacts/Release/VST3/*.exp
+            native/build/clap/SRVB_artefacts/Release/SRVB.clap
+            native/build/clap/SRVB_artefacts/Release/SRVB.vst3
+            native/build/clap/SRVB_artefacts/Release/CLAP/
+            native/build/clap/SRVB_artefacts/Release/VST3/
+            !native/build/clap/SRVB_artefacts/Release/**/*.lib
+            !native/build/clap/SRVB_artefacts/Release/**/*.exp
+          if-no-files-found: error
