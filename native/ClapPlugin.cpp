@@ -35,8 +35,9 @@ struct Parameter
 };
 
 // IDs are explicit and remain stable when display order changes.
-constexpr std::array<Parameter, 4> parameters = {
-    {{0, "size", "Size"}, {1, "decay", "Decay"}, {2, "mod", "Mod"}, {3, "mix", "Mix"}}};
+constexpr std::array<Parameter, 5> parameters = {
+    {{0, "size", "Size"}, {1, "decay", "Decay"}, {2, "mod", "Mod"}, {3, "mix", "Mix"}, {4, "bypass", "Bypass"}}};
+constexpr size_t bypassIndex = 4;
 
 size_t parameterIndex (clap_id id)
 {
@@ -253,11 +254,12 @@ const clap_plugin_params_t params = {
             return false;
         *info = {};
         info->id = parameters[index].id;
-        info->flags = CLAP_PARAM_IS_AUTOMATABLE;
+        info->flags =
+            CLAP_PARAM_IS_AUTOMATABLE | (index == bypassIndex ? CLAP_PARAM_IS_BYPASS | CLAP_PARAM_IS_STEPPED : 0);
         std::snprintf (info->name, sizeof (info->name), "%s", parameters[index].name);
         info->min_value = 0;
         info->max_value = 1;
-        info->default_value = 0.5;
+        info->default_value = index == bypassIndex ? 0.0 : 0.5;
         return true;
     },
     [] (const clap_plugin_t* plugin, clap_id id, double* value) -> bool
@@ -335,7 +337,8 @@ const clap_plugin_state_t state = {
             std::array<double, parameters.size ()> restored{};
             for (size_t i = 0; i < parameters.size (); ++i)
             {
-                const auto value = parsed.getWithDefault (parameters[i].key, elem::js::Value (0.5));
+                const auto value =
+                    parsed.getWithDefault (parameters[i].key, elem::js::Value (i == bypassIndex ? 0.0 : 0.5));
                 if (!value.isNumber ())
                     return false;
                 restored[i] = static_cast<elem::js::Number> (value);
@@ -464,6 +467,7 @@ Plugin::Plugin (const clap_host_t* pluginHost, std::filesystem::path sourcePath)
 {
     for (auto& value : values)
         value.store (0.5);
+    values[bypassIndex].store (0.0);
     for (auto& changed : editorChanges)
         changed.store (false);
     plugin.desc = &descriptor;
@@ -511,12 +515,20 @@ Plugin::Plugin (const clap_host_t* pluginHost, std::filesystem::path sourcePath)
             return CLAP_PROCESS_ERROR;
         const float* inputs[] = {input.data32[0], input.data32[1]};
         float* outputs[] = {output.data32[0], output.data32[1]};
-        for (auto* channel : outputs)
-            std::fill_n (channel, process->frames_count, 0.0f);
         output.constant_mask = 0;
         p.receiveEvents (process->in_events);
         p.sendParameterChanges (process->out_events);
-        p.engine->process (inputs, 2, outputs, 2, process->frames_count);
+        if (p.values[bypassIndex].load () == 1.0)
+        {
+            for (size_t channel = 0; channel < 2; ++channel)
+                std::copy_n (inputs[channel], process->frames_count, outputs[channel]);
+        }
+        else
+        {
+            for (auto* channel : outputs)
+                std::fill_n (channel, process->frames_count, 0.0f);
+            p.engine->process (inputs, 2, outputs, 2, process->frames_count);
+        }
         return CLAP_PROCESS_CONTINUE;
     };
     plugin.get_extension = getExtension;
